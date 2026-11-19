@@ -213,5 +213,29 @@ const galleryData = [
   caption: "Ketawa dulu, urusan merasa bersalah belakangan.",
   story: "Abis lihat orang kejungkal, bukannya langsung nolong malah kita ketawa dulu. Jahat banget emang. Tapi ya gimana, momennya terlalu tiba-tiba sampai kita berdua nggak kuat nahan ketawa.",
   featured: false
-}
+},
+  {
+  id: "Gemas Sekali Pipinyaa Sayang aku",
+  image: "assets/photos/jelita82.jpeg",
+  title: "Tumpah Tuh Pipiiiii",
+  caption: "CANTIKKKK KAN.",
+  featured: false
+  }, {
+  id: "Sore Sore kehujanan",
+  image: "assets/photos/jelita83.jpeg",
+  title: "Jas hujan sama orang gedean jas hujanya",
+  caption: "BOCILLL aku",
+  featured: false
+  }, {
+  id: "CANTIKKKK BANGETTTT",
+  image: "assets/photos/jelita84.jpeg",
+  title: "Matanya dia Indah sekaliii",
+  caption: "Cinta matiiii.",
+  featured: false
+  }, {
+  id: "Heumzzzz",
+  image: "assets/photos/jelita85.jpeg",
+  title: "Walaupun Freak TETEP Cantikkkkk",
+  caption: "Gemesss bangettt wehhh.",
+  featured: false
 ];
