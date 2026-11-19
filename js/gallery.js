@@ -238,4 +238,5 @@ const galleryData = [
   title: "Walaupun Freak TETEP Cantikkkkk",
   caption: "Gemesss bangettt wehhh.",
   featured: false
+  }
 ];
