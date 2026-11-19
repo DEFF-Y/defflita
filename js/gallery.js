@@ -222,19 +222,19 @@ const galleryData = [
   featured: false
   }, {
   id: "Sore Sore kehujanan",
-  image: "assets/photos/jelita83.jpeg",
+  image: "assets/photos/jelita83.jpg",
   title: "Jas hujan sama orang gedean jas hujanya",
   caption: "BOCILLL aku",
   featured: false
   }, {
   id: "CANTIKKKK BANGETTTT",
-  image: "assets/photos/jelita84.jpeg",
+  image: "assets/photos/jelita84.jpg",
   title: "Matanya dia Indah sekaliii",
   caption: "Cinta matiiii.",
   featured: false
   }, {
   id: "Heumzzzz",
-  image: "assets/photos/jelita85.jpeg",
+  image: "assets/photos/jelita85.jpg",
   title: "Walaupun Freak TETEP Cantikkkkk",
   caption: "Gemesss bangettt wehhh.",
   featured: false
