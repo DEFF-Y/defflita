@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alat Tambah Foto</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{margin:0;background:#150a0e;color:#f6e9e2;font:16px/1.6 system-ui,sans-serif;padding:24px}
+main{max-width:900px;margin:auto}h1{font-weight:500;margin:0 0 4px}p{color:#d3b6b0;margin:.3rem 0}
+.drop{margin:20px 0;border:2px dashed #6b3a46;border-radius:12px;padding:36px 16px;text-align:center;cursor:pointer}
+.drop.on{background:#2a131b;border-color:#e6bf9f}
+button,.btn{font:inherit;background:#e6bf9f;color:#2a0c15;border:0;border-radius:999px;padding:.6rem 1.3rem;cursor:pointer;font-weight:600}
+.ghost{background:none;color:#e6bf9f;border:1px solid #6b3a46}
+.row{display:grid;grid-template-columns:90px 1fr;gap:12px;padding:12px;margin:10px 0;background:#231119;border-radius:10px}
+.row img{width:90px;height:90px;object-fit:cover;border-radius:6px;background:#35091a}
+.f{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+input[type=text],input[type=date],textarea{width:100%;font:inherit;font-size:14px;background:#150a0e;color:inherit;border:1px solid #47282f;border-radius:6px;padding:6px 8px}
+label{font-size:13px;color:#d3b6b0;display:block}.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0}
+#status{color:#e6bf9f;font-size:14px}.err{color:#ff9aa8;font-size:14px}.x{background:none;color:#ff9aa8;padding:0;font-size:13px}
+</style></head><body><main>
+<h1>Alat Tambah Foto</h1>
+<p>Tarik semua foto ke kotak di bawah. Foto diperkecil otomatis dan tanggalnya dibaca dari kamera. Semua diproses di komputer Anda, tidak ada yang diunggah.</p>
+<p>Menambah foto baru ke galeri yang sudah ada? Muat dulu <b>js/gallery.js</b> yang lama:
+<label class="btn ghost" style="display:inline-block;margin-left:6px">Muat gallery.js lama<input id="old" type="file" accept=".js" hidden></label></p>
+<div class="drop" id="drop">Tarik foto ke sini, atau klik untuk memilih<input id="pick" type="file" accept="image/*" multiple hidden></div>
+<div class="bar"><span id="status"></span></div>
+<div id="errs" class="err"></div>
+<div id="list"></div>
+<div class="bar"><label><input id="sort" type="checkbox" checked> Urutkan menurut tanggal</label><button id="dl" type="button">Unduh paket-galeri.zip</button></div>
+<p>Isi zip: folder <b>assets/photos/</b> (foto baru) dan <b>js/gallery.js</b>. Ekstrak lalu upload ke GitHub dan timpa file lama. Foto lama tidak perlu diupload ulang.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const MONTHS=["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const idDate=iso=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||"");return m?`${+m[3]} ${MONTHS[+m[2]-1]} ${m[1]}`:""};
+//#zip-start
+function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++){c^=b[i];for(let k=0;k<8;k++)c=(c>>>1)^(0xEDB88320&-(c&1));}return(~c)>>>0}
+function makeZip(files){
+  const enc=new TextEncoder(),parts=[],central=[];let offset=0;
+  const w16=n=>[n&255,(n>>8)&255],w32=n=>[n&255,(n>>8)&255,(n>>16)&255,(n>>>24)&255];
+  for(const f of files){
+    const name=enc.encode(f.name),crc=crc32(f.data),size=f.data.length;
+    const common=[...w16(20),...w16(0x0800),...w16(0),...w16(0),...w16(33),...w32(crc),...w32(size),...w32(size),...w16(name.length),...w16(0)];
+    const local=new Uint8Array([...w32(0x04034b50),...common]);
+    parts.push(local,name,f.data);
+    central.push(new Uint8Array([...w32(0x02014b50),...w16(20),...common,...w16(0),...w16(0),...w16(0),...w32(0),...w32(offset)]),name);
+    offset+=local.length+name.length+size;
+  }
+  const cdSize=central.reduce((a,p)=>a+p.length,0);
+  const end=new Uint8Array([...w32(0x06054b50),...w16(0),...w16(0),...w16(files.length),...w16(files.length),...w32(cdSize),...w32(offset),...w16(0)]);
+  return new Blob([...parts,...central,end],{type:"application/zip"});
+}
+//#zip-end
+async function exifDate(file){
+  try{
+    const v=new DataView(await file.slice(0,131072).arrayBuffer());
+    if(v.getUint16(0)!==0xFFD8)return null;
+    let o=2;
+    while(o<v.byteLength-10){
+      const m=v.getUint16(o),len=v.getUint16(o+2);
+      if(m===0xFFE1&&v.getUint32(o+4)===0x45786966)return readTiff(v,o+10);
+      if((m&0xFF00)!==0xFF00)break;
+      o+=2+len;
+    }
+  }catch(e){}
+  return null;
+}
+function readTiff(v,t){
+  const le=v.getUint16(t)===0x4949,u16=p=>v.getUint16(p,le),u32=p=>v.getUint32(p,le);
+  const find=(ifd,tag)=>{const n=u16(ifd);for(let i=0;i<n;i++){const e=ifd+2+i*12;if(u16(e)===tag)return e}return null};
+  const ptr=find(t+u32(t+4),0x8769);if(ptr===null)return null;
+  const exif=t+u32(ptr+8);
+  let e=find(exif,0x9003);if(e===null)e=find(exif,0x9004);if(e===null)return null;
+  const off=t+u32(e+8);let s="";for(let i=0;i<10;i++)s+=String.fromCharCode(v.getUint8(off+i));
+  const m=s.match(/^(\d{4}):(\d{2}):(\d{2})/);return m?`${m[1]}-${m[2]}-${m[3]}`:null;
+}
+const isoFromMs=ms=>{const d=new Date(ms);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
+async function loadBitmap(file){
+  if(window.createImageBitmap){try{return await createImageBitmap(file,{imageOrientation:"from-image"})}catch(e){}}
+  const url=URL.createObjectURL(file);
+  try{return await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("gagal"));i.src=url})}
+  finally{setTimeout(()=>URL.revokeObjectURL(url),5000)}
+}
+const items=[];
+const usedNames=()=>new Set(items.map(i=>i.name));
+function uniqueName(base){const used=usedNames();let n=base,k=2;while(used.has(n))n=base+"-"+k++;return n}
+async function addFiles(files){
+  const list=[...files].filter(f=>/^image\//.test(f.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
+  $("errs").textContent="";const errs=[];
+  for(let n=0;n<list.length;n++){
+    const f=list[n];$("status").textContent=`Memproses ${n+1} dari ${list.length}...`;
+    try{
+      const taken=(await exifDate(f))||isoFromMs(f.lastModified);
+      const bmp=await loadBitmap(f),s=Math.min(1,1600/Math.max(bmp.width,bmp.height));
+      const cv=document.createElement("canvas");cv.width=Math.round(bmp.width*s);cv.height=Math.round(bmp.height*s);
+      cv.getContext("2d").drawImage(bmp,0,0,cv.width,cv.height);
+      const blob=await new Promise(r=>cv.toBlob(r,"image/jpeg",.82));
+      if(!blob)throw new Error("gagal");
+      const base=f.name.replace(/\.[^.]+$/,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"foto";
+      items.push({name:uniqueName(base),blob,thumb:URL.createObjectURL(blob),title:"",taken,location:"",caption:"",story:"",featured:false});
+    }catch(e){errs.push(f.name)}
+  }
+  $("status").textContent=`${items.length} foto siap.`;
+  if(errs.length)$("errs").textContent="Tidak bisa dibaca (format HEIC? ubah dulu ke JPG): "+errs.join(", ");
+  render();
+}
+function render(){
+  const box=$("list");box.innerHTML="";
+  items.forEach((it,i)=>{
+    const d=document.createElement("div");d.className="row";
+    d.innerHTML=`<img alt=""><div><div class="f">
+    <label>Judul<input type="text" data-i="${i}" data-k="title"></label>
+    <label>Tanggal<input type="date" data-i="${i}" data-k="taken"></label>
+    <label>Lokasi<input type="text" data-i="${i}" data-k="location"></label></div>
+    <div class="f" style="margin-top:8px"><label>Caption<input type="text" data-i="${i}" data-k="caption"></label>
+    <label>Cerita<input type="text" data-i="${i}" data-k="story"></label></div>
+    <div class="bar" style="margin:8px 0 0"><label><input type="checkbox" data-i="${i}" data-k="featured"> Foto utama (tampil besar)</label>
+    <button class="x" type="button" data-del="${i}">Hapus</button><span style="font-size:12px;color:#8a6a70">${it.existing?it.image:"assets/photos/"+it.name+".jpg"}</span></div></div>`;
+    const img=d.querySelector("img");img.src=it.thumb||it.image||"";img.onerror=()=>{img.style.visibility="hidden"};
+    d.querySelectorAll("[data-k]").forEach(inp=>{const k=inp.dataset.k;if(k==="featured")inp.checked=!!it.featured;else inp.value=it[k]||""});
+    box.appendChild(d);
+  });
+}
+$("list").addEventListener("input",e=>{const t=e.target,i=t.dataset.i;if(i===undefined)return;items[i][t.dataset.k]=t.dataset.k==="featured"?t.checked:t.value});
+$("list").addEventListener("click",e=>{const i=e.target.dataset.del;if(i===undefined)return;items.splice(+i,1);render();$("status").textContent=`${items.length} foto siap.`});
+const drop=$("drop");
+drop.onclick=()=>$("pick").click();
+$("pick").onchange=e=>{addFiles(e.target.files);e.target.value=""};
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("on")}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("on")}));
+drop.addEventListener("drop",e=>addFiles(e.dataTransfer.files));
+$("old").onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const data=new Function((await f.text())+"\n;return galleryData;")();
+    data.forEach(g=>{const base=(g.image||"").split("/").pop().replace(/\.[^.]+$/,"");items.push({existing:true,image:g.image,name:base,thumb:"",title:g.title||"",taken:g.taken||"",location:g.location||"",caption:g.caption||"",story:g.story||"",featured:!!g.featured,date:g.date,id:g.id})});
+    $("status").textContent=`${data.length} foto lama dimuat. Total ${items.length}.`;render();
+  }catch(err){$("errs").textContent="gallery.js lama tidak bisa dibaca."}
+  e.target.value="";
+};
+$("dl").onclick=async()=>{
+  if(!items.length){alert("Belum ada foto.");return}
+  const order=items.map((it,i)=>({it,i}));
+  if($("sort").checked)order.sort((a,b)=>(a.it.taken||"9999").localeCompare(b.it.taken||"9999")||a.i-b.i);
+  const data=order.map(({it})=>{
+    const o={image:it.existing?it.image:"assets/photos/"+it.name+".jpg"};
+    if(it.title)o.title=it.title;
+    if(it.taken){o.taken=it.taken;o.date=idDate(it.taken)}else if(it.date)o.date=it.date;
+    if(it.location)o.location=it.location;if(it.caption)o.caption=it.caption;if(it.story)o.story=it.story;if(it.featured)o.featured=true;
+    return o;
+  });
+  const js="// Dibuat otomatis oleh tambah-foto.html. Boleh diedit manual.\nconst galleryData = "+JSON.stringify(data,null,2)+";\n";
+  const files=[{name:"js/gallery.js",data:new TextEncoder().encode(js)}];
+  for(const it of items)if(!it.existing)files.push({name:"assets/photos/"+it.name+".jpg",data:new Uint8Array(await it.blob.arrayBuffer())});
+  const a=document.createElement("a");a.href=URL.createObjectURL(makeZip(files));a.download="paket-galeri.zip";document.body.appendChild(a);a.click();a.remove();
+};
+</script></body></html>
